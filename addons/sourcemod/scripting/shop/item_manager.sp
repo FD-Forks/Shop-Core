@@ -1439,7 +1439,10 @@ bool ItemManager_FillCategories(Menu menu, int source_client, bool inventory = f
 		{
 			continue;
 		}
-		
+
+		if(!FillItemsOfCategory(_, source_client, source_client, index, showAll, true))
+			continue;
+			
 		trie.GetString("name", buffer, sizeof(buffer));
 		ItemManager_OnCategoryDisplay(on_display_hndl, on_display_func, source_client, index, category, buffer, display, sizeof(display), shop_menu);
 		
@@ -1539,7 +1542,7 @@ bool ItemManager_GetItemDisplay(int item_id, int source_client, char[] buffer, i
 	return true;
 }
 
-bool ItemManager_FillItemsOfCategory(Menu menu, int client, int source_client, int category_id, bool inventory = false, bool showAll = false)
+bool ItemManager_FillItemsOfCategory(Menu menu = null, int client, int source_client, int category_id, bool inventory = false, bool showAll = false, bool shouldTest = false)
 {
 	bool result = false;
 	h_KvItems.Rewind();
@@ -1549,6 +1552,9 @@ bool ItemManager_FillItemsOfCategory(Menu menu, int client, int source_client, i
 		h_arCategories.GetString(category_id, category, sizeof(category));
 		do
 		{
+			if(shouldTest && result)
+				break;
+
 			bool isHidden = view_as<bool>(h_KvItems.GetNum("hide", 0));
 			if (h_KvItems.GetNum("category_id", -1) != category_id || !h_KvItems.GetSectionName(sItemId, sizeof(sItemId)) || (inventory && !ClientHasItemEx(client, sItemId)))
 			{
@@ -1569,25 +1575,30 @@ bool ItemManager_FillItemsOfCategory(Menu menu, int client, int source_client, i
 			if (dpCallback == null)
 				ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
 			
-			dpCallback.Position = ITEM_DATAPACKPOS_DISPLAY;
-			Function callback_display = dpCallback.ReadFunction();
-			
 			dpCallback.Position = ITEM_DATAPACKPOS_SHOULD_DISPLAY;
 			Function callback_should = dpCallback.ReadFunction();
 			
 			h_KvItems.Rewind();
 			
-			bool bShouldDisplay = ItemManager_OnItemShouldDisplay(plugin, callback_should, source_client, category_id, category, item_id, item, inventory ? Menu_Inventory : Menu_Buy);
+			if(!ItemManager_OnItemShouldDisplay(plugin, callback_should, source_client, category_id, category, item_id, item, inventory ? Menu_Inventory : Menu_Buy))
+				continue;
 			
 			bool disabled = false;
-			if (!ItemManager_OnItemDisplay(plugin, callback_display, source_client, category_id, category, item_id, item, inventory ? Menu_Inventory : Menu_Buy, disabled, display, display, sizeof(display)))
+			
+			if(!shouldTest)
 			{
-				disabled = false;
+				dpCallback.Position = ITEM_DATAPACKPOS_DISPLAY;
+				Function callback_display = dpCallback.ReadFunction();
+				
+				if (!ItemManager_OnItemDisplay(plugin, callback_display, source_client, category_id, category, item_id, item, inventory ? Menu_Inventory : Menu_Buy, disabled, display, display, sizeof(display)))
+				{
+					disabled = false;
+				}
 			}
 			
 			h_KvItems.JumpToKey(sItemId);
 			
-			if (bShouldDisplay)
+			if(menu != null)
 				menu.AddItem(sItemId, display, disabled ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
 			
 			result = true;
